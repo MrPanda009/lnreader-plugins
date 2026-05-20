@@ -4,6 +4,20 @@ import languages from './languages.js';
 import { execSync } from 'child_process';
 import { minify } from './terser.js';
 
+const envFilePath = path.join(process.cwd(), '.env');
+if (fs.existsSync(envFilePath)) {
+  const envContent = fs.readFileSync(envFilePath, 'utf-8');
+  envContent.split(/\r?\n/).forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const [key, ...rest] = trimmed.split('=');
+    const value = rest.join('=').trim();
+    if (key && value && process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  });
+}
+
 const REMOTE = execSync('git remote get-url origin')
   .toString()
   .replace(/[\s\n]/g, '');
@@ -15,13 +29,20 @@ const matched = REMOTE.match(/([^:/]+?)\/([^/.]+)(\.git)?$/);
 if (!matched) throw Error('Cant parse git url');
 const USERNAME = matched[1];
 const REPO = matched[2];
-const USER_CONTENT_LINK = process.env.USER_CONTENT_BASE
-  ? process.env.USER_CONTENT_BASE
+const rawUserContentBase = process.env.USER_CONTENT_BASE;
+const normalizedUserContentBase = rawUserContentBase
+  ? rawUserContentBase.replace(/\/$/, '')
+  : undefined;
+const USER_CONTENT_LINK = normalizedUserContentBase
+  ? normalizedUserContentBase.match(/^https?:\/\//)
+    ? normalizedUserContentBase
+    : `http://${normalizedUserContentBase}`
   : `https://raw.githubusercontent.com/${USERNAME}/${REPO}/${BRANCH}`;
 
 const STATIC_LINK = `${USER_CONTENT_LINK}/public/static`;
-// Use legacy .js/src/plugins path for backward compatibility
-const PLUGIN_LINK = `${USER_CONTENT_LINK}/.js/src/plugins`;
+const PLUGIN_LINK = normalizedUserContentBase
+  ? `${USER_CONTENT_LINK}/.js/plugins`
+  : `${USER_CONTENT_LINK}/.js/src/plugins`;
 
 const DIST_DIR = '.dist';
 
